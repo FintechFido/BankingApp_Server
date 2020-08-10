@@ -21,3 +21,5 @@ app.use(session({
 
 app.use(bodyParser.urlencoded({extended:false}));
 
+//https://jamong-icetea.tistory.com/143 sessionkey 발급 참고한 사이트
+
