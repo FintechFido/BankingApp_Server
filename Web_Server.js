@@ -3,7 +3,6 @@ var https = require('https');
 var fs = require('fs');
 var express = require("express"); // npm install express
 
-
 var key = fs.readFileSync('pr.pem', 'utf-8');
 var certificate =  fs.readFileSync('main_server.crt', 'utf-8');
 var credentials = {key: key, cert: certificate};
@@ -38,24 +37,24 @@ httpsServer.on('request',function(req,res){
 // httpsServer.listen(443);
 httpsServer.listen(8080);
 
+/*
+var hostname = '172.31.4.25'; //자신의 private IP 주소
+var port = 8080;
 
-// var hostname = '172.31.4.25'; //자신의 private IP 주소
-// var port = 8080;
+var options = 
+{
+    key: fs.readFileSync('pr.pem', 'utf-8'),
+    cert: fs.readFileSync('main_server.crt', 'utf-8')
+    //key: fs.readFileSync('pr.pem', 'utf-8'),
+    //cert: fs.readFileSync('main_server.crt', 'utf-8')
+};
 
-// var options = 
-// {
-//     key: fs.readFileSync('pr.pem', 'utf-8'),
-//     cert: fs.readFileSync('main_server.crt', 'utf-8')
-//     //key: fs.readFileSync('pr.pem', 'utf-8'),
-//     //cert: fs.readFileSync('main_server.crt', 'utf-8')
-// };
+https.createServer(options, function(req, res)
+{
+    res.writeHead(200);
+    res.end('hello world\n');
 
-// https.createServer(options, function(req, res)
-// {
-//     res.writeHead(200);
-//     res.end('hello world\n');
-
-// }).listen(port, hostname);
+}).listen(port, hostname);
 
 
 /*
