@@ -5,23 +5,24 @@ var fs = require('fs');
 var express = require("express"); // npm install express
 var mysql = require("mysql");
 var crypto = require('crypto');
+const request = require("request");
 
 //mysql에 접근 가능한 사용자 확인 여부
-var connection = mysql.createConnection({//TEST DB에 연결.(aws)
-    host: "database.c0kvvrvcbjef.ap-northeast-2.rds.amazonaws.com",
-    user: "admin",
-    password: "12344321",
-    database: "bankapp",
-    port: "3306"
-});
-
-// var connection = mysql.createConnection({//local DB에 연결.
-//     host: "localhost",
-//     user: "root",
-//     password: "8603",
+// var connection = mysql.createConnection({//TEST DB에 연결.(aws)
+//     host: "database.c0kvvrvcbjef.ap-northeast-2.rds.amazonaws.com",
+//     user: "admin",
+//     password: "12344321",
 //     database: "bankapp",
 //     port: "3306"
 // });
+
+var connection = mysql.createConnection({//local DB에 연결.
+    host: "localhost",
+    user: "root",
+    password: "8603",
+    database: "bankapp",
+    port: "3306"
+});
 
 connection.connect();
 
@@ -85,7 +86,18 @@ app.post("/login", (req,res)=>{
                         if(err) throw err;
                         else{
                             console.log("sessionKey 등록");
-                            res.json(sessionKey);
+                            //res.json(sessionKey);
+
+                            var jsonDataObj = {IF: 'login', date: ['im here', 'and here']};
+                            request.post({
+                                headers:{'content-type':'application/json'},
+                                url:"https://localhost:3002/getData",
+                                body:jsonDataObj,
+                                json:true
+                            }, function(error, response, body){
+                                console.log(body);
+                                res.json(body);
+                            });
                         }
                     });
                 }
