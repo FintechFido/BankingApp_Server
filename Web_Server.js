@@ -54,8 +54,6 @@ app.post("/login", (req,res)=>{
     var userId=req.body.userId;
     var userPassword=req.body.userPassword;
 
-    console.log(userId, userPassword);
-
     //입력받은 아이디랑 비번은 암호화해서 확인해줘야함.
     //일방향 암호화 함수 적용해서 db에서 확인해주기!
     var hash_userId = (crypto.createHash('sha512').update(String(userId)).digest('base64'));
@@ -73,7 +71,7 @@ app.post("/login", (req,res)=>{
                 var dbPW=results[0].PW;
 
                 if(dbID==hash_userId && dbPW==hash_userPassword){
-                    console.log("로그인 확인!");
+                    console.log("로그인 성공!");
 
                     //세션키 생성하고 암호화진행
                     var randomNum=Math.floor(Math.random() * 1000000000) + 1;//랜덤으로 숫자 만들기
@@ -86,20 +84,15 @@ app.post("/login", (req,res)=>{
                         if(err) throw err;
                         else{
                             console.log("sessionKey 등록");
-                            //res.json(sessionKey);
-
-                            var jsonDataObj = {IF: 'login', date: ['im here', 'and here']};
-                            request.post({
-                                headers:{'content-type':'application/json'},
-                                url:"https://localhost:3002/getData",
-                                body:jsonDataObj,
-                                json:true
-                            }, function(error, response, body){
-                                console.log(body);
-                                res.json(body);
-                            });
+                            var jsonData={"sessionkey":sessionKey};
+                            res.send(jsonData);
                         }
                     });
+                }
+                else{
+                    console.log("로그인 실패");
+                    var jsonData={"sessionkey":null};
+                    res.send(jsonData);
                 }
             }
         }
@@ -113,8 +106,6 @@ app.get("/get_test", function(req,res){
 })
 
 app.post("/post_test", function(req,res){
-
-
     //console.log("post : "+req.body);
     console.log(req.body);
     res.send("Post Success");
