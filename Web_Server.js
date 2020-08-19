@@ -6,6 +6,7 @@ var express = require("express"); // npm install express
 var mysql = require("mysql");
 var crypto = require('crypto');
 const request = require("request");
+const { resolveSoa } = require("dns");
 
 //mysql에 접근 가능한 사용자 확인 여부
 // var connection = mysql.createConnection({//TEST DB에 연결.(aws)
@@ -25,6 +26,8 @@ var connection = mysql.createConnection({//local DB에 연결.
 });
 
 connection.connect();
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; //crt의 self-signed 문제 해결
 
 var key = fs.readFileSync('./keys/sample/pr.pem', 'utf-8');
 var certificate =  fs.readFileSync('./keys/sample/main_server.crt', 'utf-8');
@@ -46,8 +49,9 @@ app.get("/login", (req,res)=>{
     res.render("login");
 });
 
-app.get("/welcome", (req, res)=>{
-   res.render("welcome");
+app.get("/fingerprint", (req, res)=>{
+    console.log("registration_fingerprint page");
+    res.render("fingerprint");
 });
 
 app.post("/login", (req,res)=>{
@@ -86,6 +90,7 @@ app.post("/login", (req,res)=>{
                             console.log("sessionKey 등록");
                             var jsonData={"sessionkey":sessionKey};
                             res.send(jsonData);
+                            console.log(jsonData);
                         }
                     });
                 }
@@ -97,6 +102,40 @@ app.post("/login", (req,res)=>{
             }
         }
     });
+});
+
+// 4.hido에서 세션키를 보내면, db에서 CI를 찾아서 SessionKey, 은행코드와 함께 HIDO 서버에 전달
+request("https://localhost:3002/registration/fingerprint",function(error, response, body){
+        console.error('error:', error);
+        console.log('statusCode:', response && response.statusCode); 
+        console.log('body:', body);
+
+        if (!error && response.statusCode == 200){
+            var data = JSON.parse(body);
+            console.log(data);
+
+            //이미 다 hash된 값.
+            var sessionKey = data.sessionKey;
+            var bankcode= data.bankcode;
+
+            app.get("/registration/fingerprint", function(req,res){
+                var sql="SELECT * FROM bank WHERE sessionKey = ?";
+                connection.query(
+                    sql,[sessionKey], function(error, results){
+                        if(error)   throw error;
+                        else{
+                            var dbCI = results[0].CI;
+                            var jsonData={
+                                "sessionKey":sessionKey,
+                                "CI": dbCI,
+                                "bankcode":bankcode
+                            };
+                            res.send(jsonData);
+                        }
+                    });
+            })
+        }
+
 });
 
 app.get("/get_test", function(req,res){
