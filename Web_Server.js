@@ -1,73 +1,141 @@
+const path = require("path");
 var http = require('http');
 var https = require('https');
 var fs = require('fs');
 var express = require("express"); // npm install express
+var mysql = require("mysql");
+var crypto = require('crypto');
+const request = require("request");
+const { resolveSoa } = require("dns");
 
+//mysql에 접근 가능한 사용자 확인 여부
+// var connection = mysql.createConnection({//TEST DB에 연결.(aws)
+//     host: "database.c0kvvrvcbjef.ap-northeast-2.rds.amazonaws.com",
+//     user: "admin",
+//     password: "12344321",
+//     database: "bankapp",
+//     port: "3306"
+// });
 
-var key = fs.readFileSync('pr.pem', 'utf-8');
-var certificate =  fs.readFileSync('main_server.crt', 'utf-8');
+var connection = mysql.createConnection({//local DB에 연결.
+    host: "localhost",
+    user: "root",
+    password: "8603",
+    database: "bankapp",
+    port: "3306"
+});
+
+connection.connect();
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; //crt의 self-signed 문제 해결
+
+var key = fs.readFileSync('./keys/sample/pr.pem', 'utf-8');
+var certificate =  fs.readFileSync('./keys/sample/main_server.crt', 'utf-8');
 var credentials = {key: key, cert: certificate};
 
 var app = express();
 
+app.use(express.urlencoded({ extended: false }));//form에서 데이터를 받아오자!
+
 app.use(express.json());
 
-//================= session Test =====================================
+app.set('views', __dirname + '/views');
+app.set('view engine', 'ejs');
+
+app.use(express.static(path.join(__dirname, "public"))); //to use static asset
+
 app.get("/login", (req,res)=>{
     console.log("login page");
-    var output=`
-    <h1>Login<h1>
-    <form action="/login" method="POST">
-        <p>
-        <input type="text" name="id" placeholder="ID">
-        </p>
-
-        <p>
-        <input type="text" name="pw" placeholder="PW">
-        </p>
-
-        <p>
-        <input type="submit">
-        </p>
-    </form>
-    `;
-
-    res.send(output);
+    res.render("login");
 });
 
-app.post('/login', (req,res)=>{
-    var userinfo={
-        user_id:"test",
-        user_pw:"1234",
-        displayName:"me"
-    };
-
-    var uid=req.body.id;
-    var upwd=req.body.pw;
-
-    if(uid===userinfo.user_id&&upwd===userinfo.user_pw){
-        req.session.displayName=userinfo.displayName;
-        req.session.save(()=>{//mysql trigger를 이용해서 sessions table의 session_id-> user의 sesssionkey로 이동할꺼임.
-            res.redirect('/welcome');
-        });
-    }else{
-        res.send("This is no id!");
-    }
+app.get("/fingerprint", (req, res)=>{
+    console.log("registration_fingerprint page");
+    res.render("fingerprint");
 });
 
-app.get("/welcome", (req, res)=>{
-    var output="";
-    if(req.session.displayName){
-        output+=`
-        <h1>Hello, ${req.session.displayName}</h1>
-        `;
-        res.send(output);
-    }else{
-        output+=`
-        <h1>Welcome</h1>
-        `;
-        res.send(output);
-    }
+app.post("/login", (req,res)=>{
+    var userId=req.body.userId;
+    var userPassword=req.body.userPassword;
+
+    //입력받은 아이디랑 비번은 암호화해서 확인해줘야함.
+    //일방향 암호화 함수 적용해서 db에서 확인해주기!
+    var hash_userId = (crypto.createHash('sha512').update(String(userId)).digest('base64'));
+    var hash_userPassword = (crypto.createHash('sha512').update(String(userPassword)).digest('base64'));
+
+    var sql = "SELECT * FROM bank WHERE ID = ?";
+    connection.query(
+        sql, [hash_userId], function (error, results) {
+        if (error) throw error;
+        else {
+            if (results.length == 0) {
+                res.json("등록되지 않았소.");
+            } else {
+                var dbID=results[0].ID;
+                var dbPW=results[0].PW;
+
+                if(dbID==hash_userId && dbPW==hash_userPassword){
+                    console.log("로그인 성공!");
+
+                    //세션키 생성하고 암호화진행
+                    var randomNum=Math.floor(Math.random() * 1000000000) + 1;//랜덤으로 숫자 만들기
+                    var sessionKey=(crypto.createHash('sha512').update(String(randomNum)).digest('base64'));//일방향 암호화 함수 적용.
+
+                    console.log("세션키 암호화해서 만들었다! ==> ", sessionKey);
+
+                    var sql2 = "UPDATE bank SET sessionKey = ? WHERE ID=?";
+                    connection.query(sql2, [sessionKey, dbID], function(err, results){
+                        if(err) throw err;
+                        else{
+                            console.log("sessionKey 등록");
+                            var jsonData={"sessionkey":sessionKey};
+                            res.send(jsonData);
+                            console.log(jsonData);
+                        }
+                    });
+                }
+                else{
+                    console.log("로그인 실패");
+                    var jsonData={"sessionkey":null};
+                    res.send(jsonData);
+                }
+            }
+        }
+    });
+});
+
+// 4.hido에서 세션키를 보내면, db에서 CI를 찾아서 SessionKey, 은행코드와 함께 HIDO 서버에 전달
+request("https://localhost:3002/registration/fingerprint",function(error, response, body){
+        console.error('error:', error);
+        console.log('statusCode:', response && response.statusCode); 
+        console.log('body:', body);
+
+        if (!error && response.statusCode == 200){
+            var data = JSON.parse(body);
+            console.log(data);
+
+            //이미 다 hash된 값.
+            var sessionKey = data.sessionKey;
+            var bankcode= data.bankcode;
+
+            app.get("/registration/fingerprint", function(req,res){
+                var sql="SELECT * FROM bank WHERE sessionKey = ?";
+                connection.query(
+                    sql,[sessionKey], function(error, results){
+                        if(error)   throw error;
+                        else{
+                            var dbCI = results[0].CI;
+                            var jsonData={
+                                "sessionKey":sessionKey,
+                                "CI": dbCI,
+                                "bankcode":bankcode
+                            };
+                            res.send(jsonData);
+                        }
+                    });
+            })
+        }
+
 });
 
 app.get("/get_test", function(req,res){
@@ -77,52 +145,12 @@ app.get("/get_test", function(req,res){
 })
 
 app.post("/post_test", function(req,res){
-
-
     //console.log("post : "+req.body);
     console.log(req.body);
     res.send("Post Success");
 })
 
 var httpsServer = https.createServer(credentials, app);
-/*
-httpsServer.on('request',function(req,res){
-    console.log(req.body+" "+res.body);
-    res.writeHead(200);
-    res.end('hello world\n');
-})
-*/
-
-// httpsServer.listen(443);
-httpsServer.listen(8080);
-
-
-// var hostname = '172.31.4.25'; //자신의 private IP 주소
-// var port = 8080;
-
-// var options = 
-// {
-//     key: fs.readFileSync('pr.pem', 'utf-8'),
-//     cert: fs.readFileSync('main_server.crt', 'utf-8')
-//     //key: fs.readFileSync('pr.pem', 'utf-8'),
-//     //cert: fs.readFileSync('main_server.crt', 'utf-8')
-// };
-
-// https.createServer(options, function(req, res)
-// {
-//     res.writeHead(200);
-//     res.end('hello world\n');
-
-// }).listen(port, hostname);
-
-
-/*
-http.createServer(function(req, res){
-    res.writeHead(200);
-    res.end('hello world\n');
-
-}).listen(port, hostname);
-*/
-
+httpsServer.listen(3000);
 
 console.log('Server running');

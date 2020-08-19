@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <h1>LOGIN PAGE</h1>
+    <p>
+        <input type="text" id="userId" placeholder="ID">
+        </p>
+        <p>
+        <input type="text" id="userPassword" placeholder="PW">
+        </p>
+        <p>
+        
+        <button type="button" id="loginBtn">Login</button>
+    </p>
+
+    <!-- JQuery library file. requared all pages -->
+    <script src="js/jquery-3.2.1.min.js"></script>
+
+    <script>
+        $("#loginBtn").click(function(){
+            var userId = $("#userId").val();
+            var userPassword = $("#userPassword").val();
+            $.ajax({
+                url:'/login',
+                type : 'POST',
+                data : {
+                    userId:userId,
+                    userPassword:userPassword,
+                },
+                success:function(data){
+                    //브라우저에 일시적으로 데이터를 저장하는 공간.
+                    sessionStorage.setItem('sessionKey', data);
+                    //window.location.href="./welcome";
+                }
+            })
+        });
+    </script>
+</body>
+</html>
