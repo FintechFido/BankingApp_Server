@@ -175,6 +175,7 @@ app.post("/logout",function(req,res){
         });
 });
 
+// 5.hido에서 세션키를 보내면, db에서 CI를 찾아서 HIDO 서버에 전달
 app.post("/registration/fingerprint", (req, res)=>{
     console.log('body',req.body);
     var sessionKey = req.body.session_key;
