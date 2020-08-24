@@ -63,20 +63,17 @@ app.get("/logout",(req,res)=>{
     res.render("logout");
 });
 
-app.get("/fingerprint", (req, res)=>{
-    console.log("registration_fingerprint page");
-    res.render("fingerprint");
-});
-
 //2. 로그인 프로세스
 app.post("/login", (req,res)=>{
-    var userId=req.body.userId;
-    var userPassword=req.body.userPassword;
+    var id=req.body.userId;
+    var passwd=req.body.userPassword;
+
+    console.log("LOGIN : "+"ID ["+req.body.id+"]  PASSWD ["+req.body.passwd+"]");
 
     //입력받은 아이디랑 비번은 암호화해서 확인해줘야함.
     //일방향 암호화 함수 적용해서 db에서 확인해주기!
-    var hash_userId = (crypto.createHash('sha512').update(String(userId)).digest('base64'));
-    var hash_userPassword = (crypto.createHash('sha512').update(String(userPassword)).digest('base64'));
+    var hash_id = (crypto.createHash('sha512').update(String(id)).digest('base64'));
+    var hash_passwdd = (crypto.createHash('sha512').update(String(passwd)).digest('base64'));
 
     var sql = "SELECT * FROM bank WHERE ID = ?";
     connection.query(
@@ -84,13 +81,19 @@ app.post("/login", (req,res)=>{
         if (error) throw error;
         else {
             if (results.length == 0) {
-                res.json("등록되지 않았소.");
+                console.log("LOGIN - FAIL");
+                var output={
+                    "mode" : "login" , 
+                    "result" : "false" , 
+                    "session_key" : null
+                }
+                res.send(output);
             } else {
                 var dbID=results[0].ID;
                 var dbPW=results[0].PW;
 
                 if(dbID==hash_userId && dbPW==hash_userPassword){
-                    console.log("login success!");
+                    console.log("LOGIN - SUCCESS");
 
                     //2-2 성공 시 sessionKey 생성
                     var randomNum=Math.floor(Math.random() * 1000000000) + 1;//랜덤으로 숫자 만들기
@@ -107,19 +110,19 @@ app.post("/login", (req,res)=>{
                                 "result" : "true" , 
                                 "session_key" : sessionKey
                             }
-                            console.log(output);
+                            //console.log(output);
                             res.send(output);
                         }
                     });
                 }
                 else{
-                    console.log("login false");
+                    console.log("LOGIN - FAIL");
                     var output={
                         "mode" : "login" , 
                         "result" : "false" , 
                         "session_key" : null
                     }
-                    console.log(output);
+                    //console.log(output);
                     res.send(output);
                 }
             }
@@ -129,11 +132,13 @@ app.post("/login", (req,res)=>{
 
 //3.로그아웃(앱 종료) 프로세스
 app.post("/logout",function(req,res){
-    var sessionKey = req.body.usersessionKey;
+    var session_key = req.body.usersessionKey;
+
+    console.log("LOGOUT : "+"Session Key ["+req.body.session_key+"]");
 
     sql = "SELECT * FROM bank WHERE sessionKey = ?";
     connection.query(
-        sql, [sessionKey], function(error, results){
+        sql, [session_key], function(error, results){
             if(error)   throw error;
             else{
                 var dbSessionKey = results[0].sessionKey;
@@ -141,7 +146,7 @@ app.post("/logout",function(req,res){
 
                 //3-2 DB 확인 및 세션 키 파기
                 if(sessionKey = dbSessionKey){
-                    console.log("logout success");
+                    console.log("LOGOUT - SUCCESS");
 
                     sql2 = "UPDATE bank SET sessionKey = ? WHERE CI = ?"
                     connection.query(
@@ -159,7 +164,7 @@ app.post("/logout",function(req,res){
                     res.send(output);
                 }
                 else{
-                    console.log("logout fail");
+                    console.log("LOGOUT - FAIL");
                     var output={
                         "mode":"logout",
                         "result":"false"
@@ -170,48 +175,21 @@ app.post("/logout",function(req,res){
         });
 });
 
-// 5.hido에서 세션키를 보내면, db에서 CI를 찾아서 HIDO 서버에 전달
-request("https://localhost:3002/registration/fingerprint",function(error, response, body){
-        console.error('error:', error);
-        console.log('statusCode:', response && response.statusCode); 
-        console.log('body:', body);
-
-        if (!error && response.statusCode == 200){
-            var data = JSON.parse(body);
-            console.log(data);
-
-            //이미 다 hash된 값.
-            var sessionKey = data.sessionKey;
-
-            app.get("/registration/fingerprint", function(req,res){
-                var sql="SELECT * FROM bank WHERE sessionKey = ?";
-                connection.query(
-                    sql,[sessionKey], function(error, results){
-                        if(error)   throw error;
-                        else{
-                            var dbCI = results[0].CI;
-                            var output={
-                                "sessionKey":sessionKey,
-                                "CI": dbCI,
-                            };
-                            res.send(output);
-                        }
-                    });
-            })
-        }
+app.post("/registration/fingerprint", (req, res)=>{
+    console.log('body',req.body);
+    var sessionKey = req.body.session_key;
+    var sql="SELECT * FROM bank WHERE sessionKey = ?";
+    connection.query(
+        sql,[sessionKey], function(error, results){
+            if(error)   throw error;
+            else{
+                var dbCI = results[0].CI;
+                var output={"CI": dbCI};
+                console.log(output);
+                res.json(output);
+            }
+        });
 });
-
-app.get("/get_test", function(req,res){
-    console.log("get");
-    res.writeHead(200);
-    res.end("GET Success");
-})
-
-app.post("/post_test", function(req,res){
-    //console.log("post : "+req.body);
-    console.log(req.body);
-    res.send("Post Success");
-})
 
 var httpsServer = https.createServer(credentials, app);
 httpsServer.listen(3000);
